@@ -1,0 +1,12 @@
+{
+  "name": "db",
+  "version": "0.0.1",
+  "dependencies": {
+    "requirejs": "~2.1.8",
+    "backbone": "~1.0.0",
+    "jquery": "~2.0.3",
+    "underscore": "~1.5.1",
+    "_compare": "simonfan/_compare"
+  },
+  "main": "backbone.db.js"
+}
