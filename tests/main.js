@@ -7,6 +7,7 @@ require.config({
 		'underscore': 'components/underscore/underscore',
 		'backbone': 'components/backbone/backbone',
 
+		'backbone.listview': 'components/backbone.listview/backbone.listview',
 		'_compare': 'components/_compare/_compare',
 
 		// the module files go here

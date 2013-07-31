@@ -85,6 +85,8 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 			console.log(loaded.length);
 */
 
+			console.log(params)
+
 			if (loaded && loaded.length === pageLength) {
 				// if there are enough models to fill up the requested pageLength
 				// return a resolved defer object, so that the interface may remain the same
@@ -120,25 +122,34 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 			query.then(function(res) {
 				var parsed = _this.parse(res);
 
-				/**
-				 * Collection end: if the parsed response is an empty array,
-				 * consider the collection to be finished.
-				 */
-				if (!parsed || parsed.length === 0) {
-					defer.resolve();
-				}
-
-
 				_this.add(parsed);
-
-				// resolve the defer with parsed results.
 				/**
-				 * In order to keep paging working seamlessly,
-				 * instead of directly solving the requestdefer with
-				 * the parsed result, re-execute the synchronous query on the clien-side db
-				 * and return models.
+				 * Collection end: 
+				 	This is a very crucial part of the application: 
+				 	detect when the collection is finished.
+
+				 	There are two possibilities: 
+				 		1: the server returns NULL or an empty array
+						2: the server returns a an array of models that is shorter
+							than the requested page length
 				 */
-				_this._requestByParams(defer, params, initial, pageLength, ajaxOptions);
+				if (!parsed || parsed.length === 0 || parsed.length < pageLength) {
+
+					// as the paging has ended, do a request by Params with the pageLength
+					// equal to the length of the parsed results
+					_this._requestByParams(defer, params, initial, parsed.length, ajaxOptions);
+					
+				} else {
+
+					/**
+					 * In order to keep paging working seamlessly,
+					 * instead of directly solving the requestdefer with
+					 * the parsed result, re-execute the synchronous query on the clien-side db
+					 * and return models.
+					 */
+					_this._requestByParams(defer, params, initial, pageLength, ajaxOptions);
+
+				}
 			});
 		},
 
