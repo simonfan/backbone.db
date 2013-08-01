@@ -157,7 +157,7 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 			if (model) {
 				// wrap the model response in an array wrapper
 				// so that it is consistent with the asynch response method.
-				defer.resolve([ model ]);
+				defer.resolve(model);
 			} else {
 				// _requestByParams(defer, params, options)
 				this._requestByParams(
@@ -209,7 +209,9 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 				// after gaps were filled, respond, by solving the defer.
 				.then(function() {
 					// do synch query again with the same parameters
-					var results = _this.query(params, options);
+					var results = _this.query(params, options),
+						// if pageLength is 1, just return one model instead of array of models.
+						results = (options.pageLength && options.pageLength === 1) ? results[0] : results;
 
 				//	console.log('result ids: ' + _.pluck(results, 'id'));
 

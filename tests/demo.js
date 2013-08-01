@@ -1,4 +1,5 @@
-define(['backbone.db','jquery','underscore','backbone','_compare','backbone.listview'], function(DB, $, undef, Backbone, undef, ListView) {
+define(['backbone.db','jquery','underscore','backbone','_compare','backbone.listview'],
+function(DB          , $      , undef      , Backbone , undef    , ListView          ) {
 
 	/**
 	 * Collections
