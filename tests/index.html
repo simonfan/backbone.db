@@ -43,17 +43,6 @@
 <body>
 
 	<div id="filter">
-		<select id="pages">
-			<option>1</option>
-			<option>2</option>
-			<option>3</option>
-			<option>4</option>
-			<option>5</option>
-			<option>6</option>
-			<option>7</option>
-			<option>8</option>
-		</select>
-
 		<input type="radio" name="reading" value="sozinho">
 		<input type="radio" name="reading" value="acompanhado">
 
@@ -75,9 +64,16 @@
 		<input type="checkbox" name="reader_and_reading" value="experiente-acompanhado">
 		experiente-acompanhado
 
+		<input type="text" id="pageLength">
+
 		<input type="button" id="next" value="next">
 	</div>
 
+
+	<div id="counter">
+		<div id="all-counter"></div>
+		<div id="filtered-counter"></div>
+	</div>
 
 	<ul id="all"></ul>
 

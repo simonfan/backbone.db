@@ -7,16 +7,38 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 		},
 
 		initDb: function(options) {
+
+			_.bindAll(this, '_requestByParams','_asynchResponse','_asynchRequest');
+
 			this.endpoint = options.endpoint || '';
 
 			this.pageLength = options.pageLength || 10;
 
 			this.ajaxOptions = options.ajaxOptions;
+
+
+
+			/**
+			 * object on which the loaded ids for a given data-set
+			 * are stored
+			 */
+			this.loaded = {};
+
+
+			/**
+			 * Object where the attribute filters are stored.
+			 * 
+			 */
+			this.attrFilters = {};
 		},
 
-		request: function(data, initial, pageLength, ajaxOptions) {
+		comparator: function(model) {
+			return parseInt(model.get('id'));
+		},
+
+		request: function(params, initial, pageLength) {
 			/**
-			 * data: 
+			 * params: 
 			 	- object: hash containing request parameters
 			 	- string: id or cid
 			 * range: 
@@ -28,16 +50,23 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 
 			var defer = $.Deferred();
 
-			if (typeof data === 'object') {
+			if (typeof params === 'object') {
 
-				initial = _.isNumber(initial) ? initial : 0;
-				pageLength = _.isNumber(pageLength) ? pageLength : this.pageLength;
+				initial = !_.isUndefined(initial) ? initial : 0;
+				pageLength = (pageLength && pageLength > 0) ? pageLength : this.pageLength;
 
-				this._requestByParams(defer, data, initial, pageLength, ajaxOptions);
+				// transform pageLength into number
+				initial = parseInt(initial);
+				pageLength = parseInt(pageLength);
 
-			} else if (typeof data === 'string' || typeof data === 'number') {
+				this._requestByParams(defer, params, {
+					initial: initial,
+					pageLength: pageLength
+				});
 
-				this._requestById(defer, data, ajaxOptions);
+			} else if (typeof params === 'string' || typeof params === 'number') {
+
+				this._requestById(defer, params, ajaxOptions);
 			}
 
 			// return the defer.
@@ -47,7 +76,9 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 
 		/**
 		 * Tries to get a model by id (backbone collection.get(id))
-		 * If unsuccessful, runs _asynchById
+		 * If unsuccessful, 
+		 * Fetches a model by ID from the endpoint.
+		 * It is actually a facade for _requestByParams
 		 */
 		_requestById: function(defer, id, ajaxOptions) {
 			var model = this.get(id);
@@ -55,76 +86,142 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 			if (model) {
 				defer.resolve(model);
 			} else {
-				this._asynchById(defer, id, ajaxOptions);
+				// _requestByParams(defer, params, options)
+				this._requestByParams(
+					defer, 
+					{ id: id },
+					{
+						initial: 0,
+						pageLength: 1
+					}
+				);
 			}
 		},
 
 		/**
-		 * Fetches a model by ID from the endpoint.
-		 * It is actually a facade for _asynchByParams
+		 * This method is pretty tricky:
+		 *  1: It does a synch query (this.query), 
+		 *	2: sends a request to the server with
+		 		- initial
+		 		- pageLength
+		 		- notIn: a list of item ids to be ignores (here is the trick!)
+		 		TRICK: by sending a list of ids of models that we already loaded on the client,
+		 		we tell the server to just 'fill the gaps'
+		 		When the request returns, we add the 'gap models' to our client DB and the database 
+		 		is synched!
+		 	3: waits for the _asynchResponse to do whatever processing of the server response
+		 	4: runs the query method again, with the same params, initial and pageLength 
+		 		(now results may be different from the initial query, as the server may have
+		 		added some new 'gap models')
 		 */
-		_asynchById: function(defer, id, ajaxOptions) {
-			var params = { id: id };
+		_requestByParams: function(defer, params, options) {
+			/**
+			 * defer: the overall query defer to be responded to
+			 * params: query parameters
+			 * options: 
+			 *	initial: initial item index
+			 *	pageLength: 
+			 *	(ajaxOptions) - removed.
+			 */
 
-			this._asynchByParams(defer, params, 0, 1, ajaxOptions);
+			var _this = this;
+
+				// load the models that already were loaded and attend the query
+			var loaded = this.query(params, options),
+				// pluck the loaded model ids.
+				loadedIds = _.pluck(loaded, 'id');
+
+			// fill the gaps:
+			this._asynchRequest(loadedIds, params, options)
+				// after gaps were filled in, respond.
+				.then(function() {
+					// do synch query again with the same parameters
+					var results = _this.query(params, options);
+
+					console.log('result ids: ' + _.pluck(results, 'id'));
+
+					// if there is only one result, remove it from wrapping array
+					results = results.length === 1 ? results[0] : results;
+
+					// resolve the defer.
+					defer.resolve(results);
+				});
 		},
 
 		/**
-		 * Filters the collection values by parameters.
-		 * If unscuccessful, runs _asynchByParams
+		 * Asynch request
 		 */
-		_requestByParams: function(defer, params, initial, pageLength, ajaxOptions) {
-			
-			var loaded = _.chain(this.query(params))
-								.rest(initial)
-								.first(pageLength)
-								.value();
-/*
-			console.log('ini ' + initial);
-			console.log('total ' + this.query(params))
-			console.log(loaded.length);
-*/
+		_asynchRequest: function(loadedIds, params, options) {
+			/**
+			 * params: query parameters
+			 * options: same as for _requestByParams
+			 *	initial
+			 *	pageLength
+			 */
 
-			console.log(params)
-
-			if (loaded && loaded.length === pageLength) {
-				// if there are enough models to fill up the requested pageLength
-				// return a resolved defer object, so that the interface may remain the same
-				// for all requests.
-				defer.resolve(loaded);
-			} else {
-				// if not, do the asynchronous request
-				this._asynchByParams(defer, params, initial, pageLength, ajaxOptions);
-			}
-		},
+			loadedIds = loadedIds || [];
 
 
-		/**
-		 * Requests models from the server.
-		 */
-		_asynchByParams: function(defer, params, initial, pageLength, ajaxOptions) {
-				
-			var _this = this,
+
+			var defer = $.Deferred();
+
 				// add the initial and length parameters to the request data.
-				serverSideParams = _.extend({
-					initial: initial,
-					pageLength: pageLength
-				}, params),
+			var metaData = {
+					// array of ids to refuse (those ids from the models already loaded)
+					loadedIds: loadedIds,
+
+					initial: options.initial,
+					pageLength: options.pageLength,
+				},
+				// the request parameters must have data about the 
+				// request paging and loaded models
+				// AND 
+				// the parameters queried
+				requestParams = _.extend(metaData, params),
 				// build url
-				url = this.url(serverSideParams),
+				url = this.url(requestParams),
 				// run query
-				query = $.ajax(url, _.extend(this.ajaxOptions, ajaxOptions));
+				query = $.ajax(url, this.ajaxOptions);
 
-			// when query is done:
-			// 	parse it,
-			//	add it,
-			//	solve the defer with it.
-			query.then(function(res) {
-				var parsed = _this.parse(res);
+			// chain up for the asynch request.
+			query
+				.then(this._asynchResponse)
+				.then(function(parsed) {
 
-				_this.add(parsed);
+
+					console.log('loaded ids: ' + loadedIds);
+					console.log('parsed: ' + _.pluck(parsed, 'id'))
+
+					defer.resolve();
+				});
+
+			// return a deferred object.
+			return defer;
+		},
+
+		/**
+		 * Process _fillGap's response
+		 */
+		_asynchResponse: function(res) {
+				// parse
+			var parsed = this.parse(res);
+
+			var beforeAdd = this.length;
+			// add models to collection
+			this.add(parsed);
+
+			var addCount = this.length - beforeAdd;
+
+
+			console.log('parsed length ' + parsed.length)
+			console.log('added ' + addCount)
+
+
+			return parsed;
+
+			if (!parsed || parsed.length === 0 || parsed.length < pageLength) {
 				/**
-				 * Collection end: 
+				 * Detect collection end: 
 				 	This is a very crucial part of the application: 
 				 	detect when the collection is finished.
 
@@ -133,24 +230,32 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 						2: the server returns a an array of models that is shorter
 							than the requested page length
 				 */
-				if (!parsed || parsed.length === 0 || parsed.length < pageLength) {
 
-					// as the paging has ended, do a request by Params with the pageLength
-					// equal to the length of the parsed results
-					_this._requestByParams(defer, params, initial, parsed.length, ajaxOptions);
-					
-				} else {
+				// trigger 'collection-end'
+				this.trigger('collection-end');
 
-					/**
-					 * In order to keep paging working seamlessly,
-					 * instead of directly solving the requestdefer with
-					 * the parsed result, re-execute the synchronous query on the clien-side db
-					 * and return models.
-					 */
-					_this._requestByParams(defer, params, initial, pageLength, ajaxOptions);
+			} else if (pageLength <= addCount) {
 
-				}
-			});
+				/**
+				 * If the addCount supplied the pageLength requested,
+				 * just synchronously query for the models and 
+				 * solve the defer with them
+				 */
+		//		var models = this.query(params, initial, pageLength)
+		//		defer.resolve(models);
+
+			} else {
+
+				console.log('added less than parsed!')
+
+		//		this._requestByParams(defer, params, initial, pageLength + parsed.length - addCount);
+
+				/**
+				 * If the addcount was not enough
+				 * try again with a higher pageLength
+				 */
+
+			}
 		},
 
 
@@ -158,13 +263,29 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 		/**
 		 * A more powerful 'where' method that invokes _evaluateModel method.
 		 */
-		query: function(params) {
-			var _this = this;
-			
-			return this.filter(function(model) {
+		query: function(params, options) {
+			/**
+			 * params: query parameters
+			 * options: initial, pageLength
+			 */
+			var _this = this,
+				initial = options.initial,
+				pageLength = options.pageLength,
 
-				return _this._evaluateModel(model, params);
-			});
+				// filter models using the _evaluateModel method.
+				filtered = this.filter(function(model) {
+
+					return _this._evaluateModel(model, params);
+				});
+
+			if (!_.isUndefined(initial) && !_.isUndefined(pageLength) ) {
+				return _.chain(filtered)
+						.rest(initial)
+						.first(pageLength)
+						.value();
+			} else {
+				return filtered;
+			}
 		},
 
 		/**
@@ -183,13 +304,6 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 				return (typeof attrFilter === 'function') ? attrFilter(attr, param) : attr === param;
 			});
 		},
-
-
-		/**
-		 * Object where the attribute filters are stored.
-		 * 
-		 */
-		attrFilters: {},
 
 		/**
 		 * Defines a function to filter an attribute from a model.

@@ -93,22 +93,31 @@ define(['backbone.db','jquery','underscore','backbone','_compare','backbone.list
 
 			// the page length
 			this.page = 0;
-			this.pageLength = 6;
+			this.pageLength = options.pageLength;
 		},
 
 		restart: function() {
-			this.source.request(this.filter.parameters(), 0, this.pageLength)
+			var pageLength = typeof this.pageLength === 'function' ? this.pageLength() : this.pageLength;
+
+			console.log(pageLength);
+
+			this.source.request(this.filter.parameters(), 0, pageLength)
 				.then(this.reset);
 		},
 
 		nextPage: function() {
-			this.source.request(this.filter.parameters(), this.length, this.pageLength)
+			var pageLength = typeof this.pageLength === 'function' ? this.pageLength() : this.pageLength;
+
+			this.source.request(this.filter.parameters(), this.length, pageLength)
 				.then(this.add);
 		}
 	})
 	window.filteredBooks = new FilteredCollection([], {
 		source: books,
-		filter: filterModel
+		filter: filterModel,
+		pageLength: function() {
+			return $('#pageLength').val() || 10;
+		}
 	});
 
 
@@ -187,6 +196,51 @@ define(['backbone.db','jquery','underscore','backbone','_compare','backbone.list
 	var filterView = new FilterView({
 		el: $('#filter'),
 		model: filterModel
+	})
+
+
+	/**
+	 * The counter views
+	 */
+	var CounterView = Backbone.View.extend({
+		initialize: function(options) {
+
+			_.bindAll(this, 'add','remove','reset','update');
+
+			this.count = options.count || 0;
+
+			this.collection.on('add', this.add);
+			this.collection.on('reset', this.reset);
+			this.collection.on('remove', this.remove);
+
+			this.collection.on('add reset remove', this.update);
+		},
+
+		add: function(model) {
+			this.count += 1;
+		},
+
+		remove: function() {
+			this.count -= 1;
+		},
+
+		reset: function(collection) {
+			this.count = collection.length;
+		},
+
+		update: function() {
+			this.$el.html('count '+ this.$el.prop('id') + ': ' + this.count);
+		}
+	});
+
+	var totalCounter = new CounterView({
+		el: $('#all-counter'),
+		collection: books
+	});
+
+	var filteredCounter = new CounterView({
+		el: $('#filtered-counter'),
+		collection: filteredBooks
 	})
 
 
