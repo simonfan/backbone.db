@@ -8,7 +8,7 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 
 		initDb: function(options) {
 
-			_.bindAll(this, '_requestByParams','_asynchResponse','_asynchRequest');
+			_.bindAll(this,'request','_requestByParams','_asynchResponse','_asynchRequest');
 
 			this.endpoint = options.endpoint || '';
 
@@ -32,10 +32,55 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 			this.attrFilters = {};
 		},
 
+		/** 
+		 * The db default behaviour is to order the models by id. (considering id as a number.)
+		 */
 		comparator: function(model) {
 			return parseInt(model.get('id'));
 		},
 
+
+		/**
+		 * Method to directly read attributes from models
+		 * Returns array of attribute values
+		 */
+		pluckRequest: function(attr, params, initial, pageLength) {
+			/**
+			 * attr: string defining which is the value to be read.
+			 */
+
+			var req = this.request(params, initial, pageLength);
+
+			return req.then(function(res) {
+				// res is a list of models
+				return _.map(res, function(m) {
+					return m.get(attr);
+				})
+			});
+		},
+
+		/**
+		 * Method to pick attributes from models
+		 * Returns array of objects containing the specified attr values.
+		 */
+		pickRequest: function(attr, params, initial, pageLength) {
+			/**
+			 * attr: string or array of attribute names to be picked.
+			 */
+			var req = this.request(params, initial, pageLength);
+
+			return req.then(function(res) {
+				return _.map(res, function(m) {
+					return m.pick(attr);
+				});
+			});
+		},
+
+		/**
+		 * Method to request models!
+		 * Returns a promise, resolves with the request result
+		 * The request result may be either an array of models or a single model.
+		 */
 		request: function(params, initial, pageLength) {
 			/**
 			 * params: 
@@ -48,16 +93,42 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 			 * ajaxOptions: opitons to be passed to $.ajax
 			 */
 
+
+			// normalize initial and pageLength
+			initial = !_.isUndefined(initial) ? initial : 0;
+			pageLength = (pageLength && pageLength > 0) ? pageLength : this.pageLength;
+			// transform pageLength into number
+			initial = parseInt(initial);
+			pageLength = parseInt(pageLength);
+
+
+			// the deferred object.
 			var defer = $.Deferred();
 
-			if (typeof params === 'object') {
+			if (_.isArray(params)) {
+				// multiple requests at once
+				// run all three requests and return a unified defer.
+				var _this = this,
+					subRequests = _.map(params, function(p) {
+						return _this.request(p, initial, pageLength);
+					});
 
-				initial = !_.isUndefined(initial) ? initial : 0;
-				pageLength = (pageLength && pageLength > 0) ? pageLength : this.pageLength;
 
-				// transform pageLength into number
-				initial = parseInt(initial);
-				pageLength = parseInt(pageLength);
+					console.log(subRequests);
+
+				// wait for all subRequests to be done to solve the main defer.
+				$.when.apply(null, subRequests)
+					.then(function() {
+							// arguments are sub request results
+						var subResponses = Array.prototype.splice.call(arguments, 0),
+							// merge all three request results into a single result
+							response = _.union.apply(null, subResponses);
+
+						// solve hte defer.
+						defer.resolve(response);
+					});
+
+			} else if (typeof params === 'object') {
 
 				this._requestByParams(defer, params, {
 					initial: initial,
@@ -84,7 +155,9 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 			var model = this.get(id);
 
 			if (model) {
-				defer.resolve(model);
+				// wrap the model response in an array wrapper
+				// so that it is consistent with the asynch response method.
+				defer.resolve([ model ]);
 			} else {
 				// _requestByParams(defer, params, options)
 				this._requestByParams(
@@ -133,15 +206,12 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 
 			// fill the gaps:
 			this._asynchRequest(loadedIds, params, options)
-				// after gaps were filled in, respond.
+				// after gaps were filled, respond, by solving the defer.
 				.then(function() {
 					// do synch query again with the same parameters
 					var results = _this.query(params, options);
 
-					console.log('result ids: ' + _.pluck(results, 'id'));
-
-					// if there is only one result, remove it from wrapping array
-					results = results.length === 1 ? results[0] : results;
+				//	console.log('result ids: ' + _.pluck(results, 'id'));
 
 					// resolve the defer.
 					defer.resolve(results);
@@ -189,8 +259,8 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 				.then(function(parsed) {
 
 
-					console.log('loaded ids: ' + loadedIds);
-					console.log('parsed: ' + _.pluck(parsed, 'id'))
+				//	console.log('loaded ids: ' + loadedIds);
+				//	console.log('parsed: ' + _.pluck(parsed, 'id'))
 
 					defer.resolve();
 				});
@@ -214,8 +284,8 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 			var addCount = this.length - beforeAdd;
 
 
-			console.log('parsed length ' + parsed.length)
-			console.log('added ' + addCount)
+		//	console.log('parsed length ' + parsed.length)
+		//	console.log('added ' + addCount)
 
 
 			return parsed;
@@ -302,7 +372,7 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 					// check if there is an attribute filter defined for the key
 					attrFilter = _this.attrFilters[ key ];
 
-				return (typeof attrFilter === 'function') ? attrFilter(attr, param) : attr === param;
+				return (typeof attrFilter === 'function') ? attrFilter(attr, param) : attr == param;
 			});
 		},
 
