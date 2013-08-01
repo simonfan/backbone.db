@@ -66,7 +66,7 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 
 			} else if (typeof params === 'string' || typeof params === 'number') {
 
-				this._requestById(defer, params, ajaxOptions);
+				this._requestById(defer, params);
 			}
 
 			// return the defer.
@@ -80,7 +80,7 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 		 * Fetches a model by ID from the endpoint.
 		 * It is actually a facade for _requestByParams
 		 */
-		_requestById: function(defer, id, ajaxOptions) {
+		_requestById: function(defer, id) {
 			var model = this.get(id);
 
 			if (model) {
@@ -207,6 +207,7 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 			var parsed = this.parse(res);
 
 			var beforeAdd = this.length;
+
 			// add models to collection
 			this.add(parsed);
 
