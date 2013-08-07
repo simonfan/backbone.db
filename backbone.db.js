@@ -204,20 +204,28 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 				// pluck the loaded model ids.
 				loadedIds = _.pluck(loaded, 'id');
 
-			// fill the gaps:
-			this._asynchRequest(loadedIds, params, options)
-				// after gaps were filled, respond, by solving the defer.
-				.then(function() {
-					// do synch query again with the same parameters
-					var results = _this.query(params, options),
-						// if pageLength is 1, just return one model instead of array of models.
-						results = (options.pageLength && options.pageLength === 1) ? results[0] : results;
+			// if the page length is 1 and there is 1 loaded answer, just return it.
+			if (options.pageLength === 1 && loaded.length === 1) {
+				defer.resolve(loaded[0]);
+			} else {
+			// otherwise do asynch request
 
-				//	console.log('result ids: ' + _.pluck(results, 'id'));
+				// fill the gaps:
+				this._asynchRequest(loadedIds, params, options)
+					// after gaps were filled, respond, by solving the defer.
+					.then(function() {
+						// do synch query again with the same parameters
+						var results = _this.query(params, options),
+							// if pageLength is 1, just return one model instead of array of models.
+							results = (options.pageLength && options.pageLength === 1) ? results[0] : results;
 
-					// resolve the defer.
-					defer.resolve(results);
-				});
+					//	console.log('result ids: ' + _.pluck(results, 'id'));
+
+						// resolve the defer.
+						defer.resolve(results);
+					});
+				
+			}
 		},
 
 		/**
