@@ -13,7 +13,9 @@ function(DB          , $      , undef      , Backbone , undef    , ListView     
 		pageLength: 6,
 		ajaxOptions: {
 			dataType: 'jsonp'
-		}
+		},
+
+		uniqueAttr: ['reader_and_reading'],
 	});
 
 	// define the reader and reading filter.

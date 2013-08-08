@@ -7,6 +7,14 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 		},
 
 		initDb: function(options) {
+			/**
+			 * Options:
+			 * 	- endpoint: the endpoint (required)
+			 *  - pageLength: the default value for page length
+			 * 	- ajaxOptions: custom jqXHR options set for all requests made by db.
+			 * 	- uniqueAttr: list of attributes that have a unique value, so that 
+			 *		the db may securely look for just one model instead of looking for a list of models.
+			 */
 
 			_.bindAll(this,'request','_requestByParams','_asynchResponse','_asynchRequest');
 
@@ -16,6 +24,14 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 
 			this.ajaxOptions = options.ajaxOptions;
 
+			/**
+			 * Unique attributes help accelerate data fetching by
+			 * letting the Backbone DB instance know that if it can find one
+			 * model with the uniqueAttr corresponding to the request params
+			 * it can securely return the result without cheking with the server if there are
+			 * no other possible results.
+			 */
+			this.uniqueAttr = _.union(['id'], options.uniqueAttr);
 
 
 			/**
@@ -202,10 +218,17 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 				// load the models that already were loaded and attend the query
 			var loaded = this.query(params, options),
 				// pluck the loaded model ids.
-				loadedIds = _.pluck(loaded, 'id');
+				loadedIds = _.pluck(loaded, 'id'),
+				// check if there is a unique attribute in the params list
+				unique = _.find(params, function(value, name) {
+					return _.contains(_this.uniqueAttr, name);
+				})
 
-			// if the page length is 1 and there is 1 loaded answer, just return it.
-			if (options.pageLength === 1 && loaded.length === 1) {
+			// if:
+			// 	1: in the params list there is a value that is listed in this.uniqueAttr
+			//		AND
+			// 	2: the list of loaded models has length equal to 1
+			if (unique && loaded.length === 1) {
 				defer.resolve(loaded[0]);
 			} else {
 			// otherwise do asynch request
