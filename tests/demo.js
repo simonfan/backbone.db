@@ -9,7 +9,7 @@ function(DB          , $      , undef      , Backbone , undef    , ListView     
 	 * Main database collection.
 	 */
 	window.books = new DB([], {
-		endpoint: 'http://ler/cms/rest/book',
+		url: 'http://ler/cms/rest/book',
 		pageLength: 6,
 		ajaxOptions: {
 			dataType: 'jsonp'

@@ -9,16 +9,16 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 		initDb: function(options) {
 			/**
 			 * Options:
-			 * 	- endpoint: the endpoint (required)
+			 * 	- url: the endpoint (required)
 			 *  - pageLength: the default value for page length
 			 * 	- ajaxOptions: custom jqXHR options set for all requests made by db.
 			 * 	- uniqueAttr: list of attributes that have a unique value, so that 
 			 *		the db may securely look for just one model instead of looking for a list of models.
 			 */
 
-			_.bindAll(this,'request','_requestByParams','_asynchResponse','_asynchRequest');
+			_.bindAll(this,'request','_requestByParams','_asynchRequest');
 
-			this.endpoint = options.endpoint || '';
+		//	this.url = options.url;
 
 			this.pageLength = options.pageLength || 10;
 
@@ -281,14 +281,23 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 				// AND 
 				// the parameters queried
 				requestParams = _.extend(metaData, params),
-				// build url
-				url = this.url(requestParams),
+				// fetch options: Backbone.set options, jqXHR options
+				fetchOptions = _.extend({ data: requestParams, remove: false }, this.ajaxOptions),
 				// run query
-				query = $.ajax(url, this.ajaxOptions);
+				query = this.fetch(fetchOptions);
+
+			/**
+			 * before, we implemented the request by ourselves,
+			 * so we had to parse and add the response.
+			 * The new implementation uses Bakcbone built-in fetch functionality, with some special options.
+			 */
+				// build url
+			//	url = this._dbUrl(requestParams),
+			//	query = $.ajax(url, this.ajaxOptions);
 
 			// chain up for the asynch request.
 			query
-				.then(this._asynchResponse)
+			//	.then(this._asynchResponse)
 				.then(function(parsed) {
 
 
@@ -302,9 +311,12 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 			return defer;
 		},
 
+
 		/**
 		 * Process _fillGap's response
 		 */
+		/* NOT NEEDED anymore as we are using Backbone.Collection.fetch instead of 
+		doing $.ajax
 		_asynchResponse: function(res) {
 				// parse
 			var parsed = this.parse(res);
@@ -322,45 +334,8 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 
 
 			return parsed;
-
-			if (!parsed || parsed.length === 0 || parsed.length < pageLength) {
-				/**
-				 * Detect collection end: 
-				 	This is a very crucial part of the application: 
-				 	detect when the collection is finished.
-
-				 	There are two possibilities: 
-				 		1: the server returns NULL or an empty array
-						2: the server returns a an array of models that is shorter
-							than the requested page length
-				 */
-
-				// trigger 'collection-end'
-				this.trigger('collection-end');
-
-			} else if (pageLength <= addCount) {
-
-				/**
-				 * If the addCount supplied the pageLength requested,
-				 * just synchronously query for the models and 
-				 * solve the defer with them
-				 */
-		//		var models = this.query(params, initial, pageLength)
-		//		defer.resolve(models);
-
-			} else {
-
-				console.log('added less than parsed!')
-
-		//		this._requestByParams(defer, params, initial, pageLength + parsed.length - addCount);
-
-				/**
-				 * If the addcount was not enough
-				 * try again with a higher pageLength
-				 */
-
-			}
 		},
+		*/
 
 
 
@@ -428,11 +403,14 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 		/**
 		 * Helper method that builds the url.
 		 */
-		url: function(params) {
-			var jsonp = this.ajaxOptions.dataType === 'jsonp' ? '&callback=?' : '';
+		 /* deprecated
+		_dbUrl: function(params) {
+			var jsonp = this.ajaxOptions.dataType === 'jsonp' ? '&callback=?' : '',
+				endpoint = typeof this.url === 'function' ? this.url() : this.url;
 
-			return this.endpoint + '?' + $.param(params) + jsonp;
+			return endpoint + '?' + $.param(params) + jsonp;
 		},
+		*/
 	});
 
 	return DB;
