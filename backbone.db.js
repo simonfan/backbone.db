@@ -45,7 +45,7 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 			 * Object where the attribute filters are stored.
 			 * 
 			 */
-			this.attrFilters = {};
+			this.attrFilters = _.extend({}, this.attrFilters, options.attrFilters);
 		},
 
 		/** 

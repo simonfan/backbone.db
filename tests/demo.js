@@ -4,11 +4,14 @@ function(DB          , $      , undef      , Backbone , undef    , ListView     
 	/**
 	 * Collections
 	 */
+	var BookDB = DB.extend({
+
+	})
 
 	/**
 	 * Main database collection.
 	 */
-	window.books = new DB([], {
+	window.books = new BookDB([], {
 		url: 'http://ler/cms/rest/book',
 		pageLength: 6,
 		ajaxOptions: {
@@ -16,11 +19,7 @@ function(DB          , $      , undef      , Backbone , undef    , ListView     
 		},
 
 		uniqueAttr: ['reader_and_reading'],
-	});
-
-	// define the reader and reading filter.
-	books.attrFilter(
-		{
+		attrFilters: {
 			reader_and_reading: function(a, p) {
 				// a: attr, p: param
 				var aIsArr = _.isArray(a),
@@ -50,8 +49,7 @@ function(DB          , $      , undef      , Backbone , undef    , ListView     
 				}
 			}
 		}
-	);
-
+	});
 
 	/**
 	 * Filter model
