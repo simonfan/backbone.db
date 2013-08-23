@@ -382,7 +382,7 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 					// check if there is an attribute filter defined for the key
 					attrFilter = _this.attrFilters[ key ];
 
-				return (typeof attrFilter === 'function') ? attrFilter(attr, param, _this) : attr == param;
+				return (typeof attrFilter === 'function') ? attrFilter(attr, param, model) : attr == param;
 			});
 		},
 
