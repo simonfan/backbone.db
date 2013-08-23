@@ -44,6 +44,8 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 			/**
 			 * Object where the attribute filters are stored.
 			 * 
+			 * Attribute Filters are applied even when the attributes do not exist on the models!
+			 Thi is really powerful.
 			 */
 			this.attrFilters = _.extend({}, this.attrFilters, options.attrFilters);
 		},
@@ -380,7 +382,7 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 					// check if there is an attribute filter defined for the key
 					attrFilter = _this.attrFilters[ key ];
 
-				return (typeof attrFilter === 'function') ? attrFilter(attr, param) : attr == param;
+				return (typeof attrFilter === 'function') ? attrFilter(attr, param, _this) : attr == param;
 			});
 		},
 
