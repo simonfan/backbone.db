@@ -1,4 +1,4 @@
-define(['backbone','jquery','underscore','_compare'], function(Backbone, $, undef, undef) {
+define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 
 	var DB = Backbone.DB = Backbone.Collection.extend({
 		initialize: function(models, options) {
@@ -48,6 +48,12 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 			 Thi is really powerful.
 			 */
 			this.attrFilters = _.extend({}, this.attrFilters, options.attrFilters);
+
+
+			/**
+			 * Hash containing sent requests
+			 */
+			this.sent = {};
 		},
 
 		/** 
@@ -94,6 +100,23 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 			});
 		},
 
+
+		/**
+		 * Check if given request has already been sent.
+		 * If so, return the promise of the sent request.
+		 * The method is a getter and a setter.
+		 */
+		sentRequest: function(identifier, promise) {
+
+			if (typeof promise === 'undefined') {
+				// get
+				return this.sent[ identifier ];
+			} else {
+				// set
+				this.sent[ identifier ] = promise;
+			}
+		},
+
 		/**
 		 * Method to request models!
 		 * Returns a promise, resolves with the request result
@@ -111,6 +134,17 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 			 * ajaxOptions: opitons to be passed to $.ajax
 			 */
 
+				// get request identifier
+			var identifier = JSON.stringify(_.extend({
+					initial: initial,
+					pageLength: pageLength
+				}, params)),
+				// sent request
+				sentRequest = this.sentRequest(identifier);
+
+			if (sentRequest) {
+				return sentRequest;
+			}
 
 			// normalize initial and pageLength
 			initial = !_.isUndefined(initial) ? initial : 0;
@@ -122,6 +156,11 @@ define(['backbone','jquery','underscore','_compare'], function(Backbone, $, unde
 
 			// the deferred object.
 			var defer = $.Deferred();
+
+			/**
+			 * Save the promise as a sent request
+			 */
+			this.sentRequest(identifier, defer);
 
 			if (_.isArray(params)) {
 				// multiple requests at once
