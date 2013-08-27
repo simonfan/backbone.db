@@ -18,8 +18,6 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 
 			_.bindAll(this,'request','_requestByParams','_asynchRequest');
 
-		//	this.url = options.url;
-
 			this.pageLength = options.pageLength || 10;
 
 			this.ajaxOptions = options.ajaxOptions;
@@ -47,13 +45,13 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 			 * Attribute Filters are applied even when the attributes do not exist on the models!
 			 Thi is really powerful.
 			 */
-			this.attrFilters = _.extend({}, this.attrFilters, options.attrFilters);
+			this.attrFilters = _.extend({}, this.attrFilters);
 
 
 			/**
-			 * Hash containing sent requests
+			 * Cache the requests
 			 */
-			this.sent = {};
+			this._cache = {};
 		},
 
 		/** 
@@ -100,23 +98,6 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 			});
 		},
 
-
-		/**
-		 * Check if given request has already been sent.
-		 * If so, return the promise of the sent request.
-		 * The method is a getter and a setter.
-		 */
-		sentRequest: function(identifier, promise) {
-
-			if (typeof promise === 'undefined') {
-				// get
-				return this.sent[ identifier ];
-			} else {
-				// set
-				this.sent[ identifier ] = promise;
-			}
-		},
-
 		/**
 		 * Method to request models!
 		 * Returns a promise, resolves with the request result
@@ -127,77 +108,76 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 			 * params: 
 			 	- object: hash containing request parameters
 			 	- string: id or cid
-			 * range: 
-				- array: [initial, final],
-				- number: initial (final is calculated through 'this.perPage')
-				- function: evaluate it.
-			 * ajaxOptions: opitons to be passed to $.ajax
+			 	- array: array of request parameters
+			 * initial: number
+			 * pageLength: number
 			 */
-
-				// get request identifier
-			var identifier = JSON.stringify(_.extend({
-					initial: initial,
-					pageLength: pageLength
-				}, params)),
-				// sent request
-				sentRequest = this.sentRequest(identifier);
-
-			if (sentRequest) {
-				return sentRequest;
-			}
 
 			// normalize initial and pageLength
 			initial = !_.isUndefined(initial) ? initial : 0;
 			pageLength = (pageLength && pageLength > 0) ? pageLength : this.pageLength;
+
 			// transform pageLength into number
-			initial = parseInt(initial);
-			pageLength = parseInt(pageLength);
+			var options = {
+				initial: parseInt(initial),
+				pageLength: parseInt(pageLength),
+			}
 
+			if (typeof params === 'object') {
 
-			// the deferred object.
-			var defer = $.Deferred();
-
-			/**
-			 * Save the promise as a sent request
-			 */
-			this.sentRequest(identifier, defer);
-
-			if (_.isArray(params)) {
-				// multiple requests at once
-				// run all three requests and return a unified defer.
-				var _this = this,
-					subRequests = _.map(params, function(p) {
-						return _this.request(p, initial, pageLength);
-					});
-
-
-					console.log(subRequests);
-
-				// wait for all subRequests to be done to solve the main defer.
-				$.when.apply(null, subRequests)
-					.then(function() {
-							// arguments are sub request results
-						var subResponses = Array.prototype.splice.call(arguments, 0),
-							// merge all three request results into a single result
-							response = _.union.apply(null, subResponses);
-
-						// solve hte defer.
-						defer.resolve(response);
-					});
-
-			} else if (typeof params === 'object') {
-
-				this._requestByParams(defer, params, {
-					initial: initial,
-					pageLength: pageLength
-				});
+				// query request
+				return this._requestByParams(params, options);
 
 			} else if (typeof params === 'string' || typeof params === 'number') {
 
-				this._requestById(defer, params);
-			}
+				// id request
+				return this._requestById(params);
 
-			// return the defer.
+			} else if (_.isArray(params)) {
+
+				// multiple request
+				return this._requestMultiple(params, options);
+			}
+		},
+
+
+		/**
+		 * Check if given request has already been sent.
+		 * If so, return the promise of the sent request.
+		 * The method is a getter and a setter.
+		 */
+		cache: function(params, promise) {
+
+				// the request identifier is a JSON string.
+			var requestIdentifier = JSON.stringify(params);
+
+			if (typeof promise === 'undefined') {
+				// get
+				return this._cache[ requestIdentifier ];
+			} else {
+				// set
+				return this._cache[ requestIdentifier ] = promise;
+			}
+		},
+
+		/**
+		 * Runs a request with multiple sub requests
+		 */
+		_requestMultiple: function(params, options) {
+
+			var _this = this,
+				defer = $.Deferred(),
+				subRequests = _.map(params, function(p) {
+					return _this.request(p, options.initial, options.pageLength);
+				});
+
+			$.when.apply(null, subRequests)
+				.then(function() {
+					// solve the defer with an array containing the results of the sub
+					// requests.
+					defer.resolve( Array.prototype.splice.call(arguments, 0) );
+				});
+
 			return defer;
 		},
 
@@ -208,17 +188,17 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 		 * Fetches a model by ID from the endpoint.
 		 * It is actually a facade for _requestByParams
 		 */
-		_requestById: function(defer, id) {
+		_requestById: function(id) {
 			var model = this.get(id);
 
 			if (model) {
-				// wrap the model response in an array wrapper
-				// so that it is consistent with the asynch response method.
-				defer.resolve(model);
+				// return a resolved defer object.
+				return $.Deferred().resolve(model);
+
 			} else {
 				// _requestByParams(defer, params, options)
-				this._requestByParams(
-					defer, 
+				
+				return this._requestByParams(
 					{ id: id },
 					{
 						initial: 0,
@@ -244,9 +224,8 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 		 		(now results may be different from the initial query, as the server may have
 		 		added some new 'gap models')
 		 */
-		_requestByParams: function(defer, params, options) {
+		_requestByParams: function(params, options) {
 			/**
-			 * defer: the overall query defer to be responded to
 			 * params: query parameters
 			 * options: 
 			 *	initial: initial item index
@@ -254,7 +233,8 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 			 *	(ajaxOptions) - removed.
 			 */
 
-			var _this = this;
+			var defer = $.Deferred(),
+				_this = this;
 
 				// load the models that already were loaded and attend the query
 			var loaded = this.query(params, options),
@@ -272,7 +252,7 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 			if (unique && loaded.length === 1) {
 				defer.resolve(loaded[0]);
 			} else {
-			// otherwise do asynch request
+				// otherwise do asynch request to the database.
 
 				// fill the gaps:
 				this._asynchRequest(loadedIds, params, options)
@@ -290,6 +270,8 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 					});
 				
 			}
+
+			return defer;
 		},
 
 		/**
@@ -305,10 +287,6 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 
 			loadedIds = loadedIds || [];
 
-
-
-			var defer = $.Deferred();
-
 				// add the initial and length parameters to the request data.
 			var metaData = {
 					// array of ids to refuse (those ids from the models already loaded)
@@ -322,63 +300,41 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 				// AND 
 				// the parameters queried
 				requestParams = _.extend(metaData, params),
-				// fetch options: Backbone.set options, jqXHR options
-				fetchOptions = _.extend({ data: requestParams, remove: false }, this.ajaxOptions),
-				// run query
-				query = this.fetch(fetchOptions);
 
-			/**
-			 * before, we implemented the request by ourselves,
-			 * so we had to parse and add the response.
-			 * The new implementation uses Bakcbone built-in fetch functionality, with some special options.
-			 */
-				// build url
-			//	url = this._dbUrl(requestParams),
-			//	query = $.ajax(url, this.ajaxOptions);
-
-			// chain up for the asynch request.
-			query
-			//	.then(this._asynchResponse)
-				.then(function(parsed) {
+				// cached request promise
+				cached = this.cache(requestParams);
 
 
-				//	console.log('loaded ids: ' + loadedIds);
-				//	console.log('parsed: ' + _.pluck(parsed, 'id'))
+			if (cached) {
+				console.log(JSON.stringify(requestParams));
+				console.log('cached request')
 
-					defer.resolve();
-				});
+				// return cached defer object.
+				return cached;
+			} else {
 
-			// return a deferred object.
-			return defer;
+				console.log('request')
+
+				/**
+				 * before, we implemented the request by ourselves,
+				 * so we had to parse and add the response.
+				 * The new implementation uses Bakcbone built-in fetch functionality, with some special options.
+				 */
+
+				// send request
+				var defer = $.Deferred(),
+					// fetch options: Backbone.set options, jqXHR options
+					fetchOptions = _.extend({ data: requestParams, remove: false }, this.ajaxOptions),
+					// run query
+					query = this.fetch(fetchOptions);
+
+				// cache query.
+				this.cache(requestParams, query);
+
+				// return deferred object.
+				return query;
+			}
 		},
-
-
-		/**
-		 * Process _fillGap's response
-		 */
-		/* NOT NEEDED anymore as we are using Backbone.Collection.fetch instead of 
-		doing $.ajax
-		_asynchResponse: function(res) {
-				// parse
-			var parsed = this.parse(res);
-
-			var beforeAdd = this.length;
-
-			// add models to collection
-			this.add(parsed);
-
-			var addCount = this.length - beforeAdd;
-
-
-		//	console.log('parsed length ' + parsed.length)
-		//	console.log('added ' + addCount)
-
-
-			return parsed;
-		},
-		*/
-
-
 
 		/**
 		 * A more powerful 'where' method that invokes _evaluateModel method.
@@ -424,34 +380,6 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 				return (typeof attrFilter === 'function') ? attrFilter(attr, param, model) : attr == param;
 			});
 		},
-
-		/**
-		 * Defines a function to filter an attribute from a model.
-		 */
-		attrFilter: function(name, filter) {
-			if (typeof name === 'string') {
-				this.attrFilters[ name ] = filter;
-			} else {
-				var _this = this;
-				_.each(name, function(filter, name) {
-					_this.attrFilter(name, filter);
-				});
-			}
-
-			return this;
-		},
-
-		/**
-		 * Helper method that builds the url.
-		 */
-		 /* deprecated
-		_dbUrl: function(params) {
-			var jsonp = this.ajaxOptions.dataType === 'jsonp' ? '&callback=?' : '',
-				endpoint = typeof this.url === 'function' ? this.url() : this.url;
-
-			return endpoint + '?' + $.param(params) + jsonp;
-		},
-		*/
 	});
 
 	return DB;

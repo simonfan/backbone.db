@@ -5,20 +5,6 @@ function(DB          , $      , undef      , Backbone , undef    , ListView     
 	 * Collections
 	 */
 	var BookDB = DB.extend({
-
-	})
-
-	/**
-	 * Main database collection.
-	 */
-	window.books = new BookDB([], {
-		url: 'http://ler/cms/rest/book',
-		pageLength: 6,
-		ajaxOptions: {
-			dataType: 'jsonp'
-		},
-
-		uniqueAttr: ['reader_and_reading'],
 		attrFilters: {
 			reader_and_reading: function(a, p) {
 				// a: attr, p: param
@@ -49,6 +35,19 @@ function(DB          , $      , undef      , Backbone , undef    , ListView     
 				}
 			}
 		}
+	})
+
+	/**
+	 * Main database collection.
+	 */
+	window.books = new BookDB([], {
+		url: 'http://ler/cms/rest/book',
+		pageLength: 6,
+		ajaxOptions: {
+			dataType: 'jsonp'
+		},
+
+		uniqueAttr: ['reader_and_reading'],
 	});
 
 	/**
