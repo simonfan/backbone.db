@@ -122,8 +122,13 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 				initial: parseInt(initial),
 				pageLength: parseInt(pageLength),
 			}
+			
+			// check for array first of all!
+			if (_.isArray(params)) {
+				// multiple request
+				return this._requestMultiple(params, options);
 
-			if (typeof params === 'object') {
+			} else if (typeof params === 'object') {
 
 				// query request
 				return this._requestByParams(params, options);
@@ -132,12 +137,7 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 
 				// id request
 				return this._requestById(params);
-
-			} else if (_.isArray(params)) {
-
-				// multiple request
-				return this._requestMultiple(params, options);
-			}
+			} 
 		},
 
 
@@ -171,12 +171,18 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 					return _this.request(p, options.initial, options.pageLength);
 				});
 
-			$.when.apply(null, subRequests)
-				.then(function() {
-					// solve the defer with an array containing the results of the sub
-					// requests.
-					defer.resolve( Array.prototype.splice.call(arguments, 0) );
-				});
+			if (subRequests.length > 0) {
+
+				$.when.apply(null, subRequests)
+					.then(function() {
+						// solve the defer with an array containing the results of the sub
+						// requests.
+						defer.resolve( Array.prototype.splice.call(arguments, 0) );
+					});
+
+			} else {
+				defer.resolve([]);
+			}
 
 			return defer;
 		},
