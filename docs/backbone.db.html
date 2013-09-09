@@ -1,0 +1,321 @@
+<!DOCTYPE html>  <html> <head>   <title>backbone.db.js</title>   <meta http-equiv="content-type" content="text/html; charset=UTF-8">   <link rel="stylesheet" media="all" href="docco.css" /> </head> <body>   <div id="container">     <div id="background"></div>          <table cellpadding="0" cellspacing="0">       <thead>         <tr>           <th class="docs">             <h1>               backbone.db.js             </h1>           </th>           <th class="code">           </th>         </tr>       </thead>       <tbody>                               <tr id="section-1">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-1">&#182;</a>               </div>                            </td>             <td class="code">               <div class="highlight"><pre><span class="nx">define</span><span class="p">([</span><span class="s1">&#39;backbone&#39;</span><span class="p">,</span><span class="s1">&#39;jquery&#39;</span><span class="p">,</span><span class="s1">&#39;underscore&#39;</span><span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">Backbone</span><span class="p">,</span> <span class="nx">$</span><span class="p">,</span> <span class="nx">undef</span> <span class="p">)</span> <span class="p">{</span>
+
+  <span class="kd">var</span> <span class="nx">DB</span> <span class="o">=</span> <span class="nx">Backbone</span><span class="p">.</span><span class="nx">DB</span> <span class="o">=</span> <span class="nx">Backbone</span><span class="p">.</span><span class="nx">Collection</span><span class="p">.</span><span class="nx">extend</span><span class="p">({</span>
+    <span class="nx">initialize</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">models</span><span class="p">,</span> <span class="nx">options</span><span class="p">)</span> <span class="p">{</span>
+      <span class="nx">options</span> <span class="o">=</span> <span class="nx">options</span> <span class="o">||</span> <span class="p">{};</span>
+      <span class="k">this</span><span class="p">.</span><span class="nx">initDb</span><span class="p">(</span><span class="nx">options</span><span class="p">);</span>
+    <span class="p">},</span>
+
+    <span class="nx">initDb</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">options</span><span class="p">)</span> <span class="p">{</span>
+      <span class="cm">/**</span>
+<span class="cm">       * Options:</span>
+<span class="cm">       *  - url: the endpoint (required)</span>
+<span class="cm">       *  - pageLength: the default value for page length</span>
+<span class="cm">       *  - ajaxOptions: custom jqXHR options set for all requests made by db.</span>
+<span class="cm">       *  - uniqueAttr: list of attributes that have a unique value, so that </span>
+<span class="cm">       *    the db may securely look for just one model instead of looking for a list of models.</span>
+<span class="cm">       */</span>
+
+      <span class="nx">_</span><span class="p">.</span><span class="nx">bindAll</span><span class="p">(</span><span class="k">this</span><span class="p">,</span><span class="s1">&#39;request&#39;</span><span class="p">,</span><span class="s1">&#39;_requestByParams&#39;</span><span class="p">,</span><span class="s1">&#39;_asynchRequest&#39;</span><span class="p">);</span>
+
+      <span class="k">this</span><span class="p">.</span><span class="nx">pageLength</span> <span class="o">=</span> <span class="nx">options</span><span class="p">.</span><span class="nx">pageLength</span> <span class="o">||</span> <span class="mi">10</span><span class="p">;</span>
+
+      <span class="k">this</span><span class="p">.</span><span class="nx">ajaxOptions</span> <span class="o">=</span> <span class="nx">options</span><span class="p">.</span><span class="nx">ajaxOptions</span><span class="p">;</span>
+
+      <span class="cm">/**</span>
+<span class="cm">       * Unique attributes help accelerate data fetching by</span>
+<span class="cm">       * letting the Backbone DB instance know that if it can find one</span>
+<span class="cm">       * model with the uniqueAttr corresponding to the request params</span>
+<span class="cm">       * it can securely return the result without cheking with the server if there are</span>
+<span class="cm">       * other possible results.</span>
+<span class="cm">       */</span>
+      <span class="k">this</span><span class="p">.</span><span class="nx">uniqueAttr</span> <span class="o">=</span> <span class="nx">_</span><span class="p">.</span><span class="nx">union</span><span class="p">([</span><span class="s1">&#39;id&#39;</span><span class="p">],</span> <span class="nx">options</span><span class="p">.</span><span class="nx">uniqueAttr</span><span class="p">);</span>
+
+
+      <span class="cm">/**</span>
+<span class="cm">       * object on which the loaded ids for a given data-set</span>
+<span class="cm">       * are stored</span>
+<span class="cm">       */</span>
+      <span class="k">this</span><span class="p">.</span><span class="nx">loaded</span> <span class="o">=</span> <span class="p">{};</span>
+
+
+      <span class="cm">/**</span>
+<span class="cm">       * Object where the attribute filters are stored.</span>
+<span class="cm">       * </span>
+<span class="cm">       * Attribute Filters are applied even when the attributes do not exist on the models!</span>
+<span class="cm">       Thi is really powerful.</span>
+<span class="cm">       */</span>
+      <span class="k">this</span><span class="p">.</span><span class="nx">attrFilters</span> <span class="o">=</span> <span class="nx">_</span><span class="p">.</span><span class="nx">extend</span><span class="p">({},</span> <span class="k">this</span><span class="p">.</span><span class="nx">attrFilters</span><span class="p">);</span>
+
+
+      <span class="cm">/**</span>
+<span class="cm">       * Cache the requests</span>
+<span class="cm">       */</span>
+      <span class="k">this</span><span class="p">.</span><span class="nx">_cache</span> <span class="o">=</span> <span class="p">{};</span>
+    <span class="p">},</span>
+
+    <span class="cm">/** </span>
+<span class="cm">     * The db default behaviour is to order the models by id. (considering id as a number.)</span>
+<span class="cm">     */</span>
+    <span class="nx">comparator</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">model</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="nb">parseInt</span><span class="p">(</span><span class="nx">model</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="s1">&#39;id&#39;</span><span class="p">));</span>
+    <span class="p">},</span>
+
+
+    <span class="cm">/**</span>
+<span class="cm">     * Method to directly read attributes from models</span>
+<span class="cm">     * Returns array of attribute values</span>
+<span class="cm">     */</span>
+    <span class="nx">pluckRequest</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">attr</span><span class="p">,</span> <span class="nx">params</span><span class="p">,</span> <span class="nx">initial</span><span class="p">,</span> <span class="nx">pageLength</span><span class="p">)</span> <span class="p">{</span>
+      <span class="cm">/**</span>
+<span class="cm">       * attr: string defining which is the value to be read.</span>
+<span class="cm">       */</span>
+
+      <span class="kd">var</span> <span class="nx">req</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">request</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="nx">initial</span><span class="p">,</span> <span class="nx">pageLength</span><span class="p">);</span>
+
+      <span class="k">return</span> <span class="nx">req</span><span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">res</span><span class="p">)</span> <span class="p">{</span></pre></div>             </td>           </tr>                               <tr id="section-2">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-2">&#182;</a>               </div>               <p>res is a list of models</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="k">return</span> <span class="nx">_</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="nx">res</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">m</span><span class="p">)</span> <span class="p">{</span>
+          <span class="k">return</span> <span class="nx">m</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="nx">attr</span><span class="p">);</span>
+        <span class="p">})</span>
+      <span class="p">});</span>
+    <span class="p">},</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * Method to pick attributes from models</span>
+<span class="cm">     * Returns array of objects containing the specified attr values.</span>
+<span class="cm">     */</span>
+    <span class="nx">pickRequest</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">attr</span><span class="p">,</span> <span class="nx">params</span><span class="p">,</span> <span class="nx">initial</span><span class="p">,</span> <span class="nx">pageLength</span><span class="p">)</span> <span class="p">{</span>
+      <span class="cm">/**</span>
+<span class="cm">       * attr: string or array of attribute names to be picked.</span>
+<span class="cm">       */</span>
+      <span class="kd">var</span> <span class="nx">req</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">request</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="nx">initial</span><span class="p">,</span> <span class="nx">pageLength</span><span class="p">);</span>
+
+      <span class="k">return</span> <span class="nx">req</span><span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">res</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="nx">_</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="nx">res</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">m</span><span class="p">)</span> <span class="p">{</span>
+          <span class="k">return</span> <span class="nx">m</span><span class="p">.</span><span class="nx">pick</span><span class="p">(</span><span class="nx">attr</span><span class="p">);</span>
+        <span class="p">});</span>
+      <span class="p">});</span>
+    <span class="p">},</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * Method to request models!</span>
+<span class="cm">     * Returns a promise, resolves with the request result</span>
+<span class="cm">     * The request result may be either an array of models or a single model.</span>
+<span class="cm">     */</span>
+    <span class="nx">request</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="nx">initial</span><span class="p">,</span> <span class="nx">pageLength</span><span class="p">)</span> <span class="p">{</span>
+      <span class="cm">/**</span>
+<span class="cm">       * params: </span>
+<span class="cm">        - object: hash containing request parameters</span>
+<span class="cm">        - string: id or cid</span>
+<span class="cm">        - array: array of request parameters</span>
+<span class="cm">       * initial: number</span>
+<span class="cm">       * pageLength: number</span>
+<span class="cm">       */</span></pre></div>             </td>           </tr>                               <tr id="section-3">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-3">&#182;</a>               </div>               <p>normalize initial and pageLength</p>             </td>             <td class="code">               <div class="highlight"><pre>      <span class="nx">initial</span> <span class="o">=</span> <span class="o">!</span><span class="nx">_</span><span class="p">.</span><span class="nx">isUndefined</span><span class="p">(</span><span class="nx">initial</span><span class="p">)</span> <span class="o">?</span> <span class="nx">initial</span> <span class="o">:</span> <span class="mi">0</span><span class="p">;</span>
+      <span class="nx">pageLength</span> <span class="o">=</span> <span class="p">(</span><span class="nx">pageLength</span> <span class="o">&amp;&amp;</span> <span class="nx">pageLength</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">?</span> <span class="nx">pageLength</span> <span class="o">:</span> <span class="k">this</span><span class="p">.</span><span class="nx">pageLength</span><span class="p">;</span></pre></div>             </td>           </tr>                               <tr id="section-4">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-4">&#182;</a>               </div>               <p>transform pageLength into number</p>             </td>             <td class="code">               <div class="highlight"><pre>      <span class="kd">var</span> <span class="nx">options</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="nx">initial</span><span class="o">:</span> <span class="nb">parseInt</span><span class="p">(</span><span class="nx">initial</span><span class="p">),</span>
+        <span class="nx">pageLength</span><span class="o">:</span> <span class="nb">parseInt</span><span class="p">(</span><span class="nx">pageLength</span><span class="p">),</span>
+      <span class="p">}</span>
+      </pre></div>             </td>           </tr>                               <tr id="section-5">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-5">&#182;</a>               </div>               <p>check for array first of all!</p>             </td>             <td class="code">               <div class="highlight"><pre>      <span class="k">if</span> <span class="p">(</span><span class="nx">_</span><span class="p">.</span><span class="nx">isArray</span><span class="p">(</span><span class="nx">params</span><span class="p">))</span> <span class="p">{</span></pre></div>             </td>           </tr>                               <tr id="section-6">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-6">&#182;</a>               </div>               <p>multiple request</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="nx">_requestMultiple</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="nx">options</span><span class="p">);</span>
+
+      <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">params</span> <span class="o">===</span> <span class="s1">&#39;object&#39;</span><span class="p">)</span> <span class="p">{</span></pre></div>             </td>           </tr>                               <tr id="section-7">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-7">&#182;</a>               </div>               <p>query request</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="nx">_requestByParams</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="nx">options</span><span class="p">);</span>
+
+      <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">params</span> <span class="o">===</span> <span class="s1">&#39;string&#39;</span> <span class="o">||</span> <span class="k">typeof</span> <span class="nx">params</span> <span class="o">===</span> <span class="s1">&#39;number&#39;</span><span class="p">)</span> <span class="p">{</span></pre></div>             </td>           </tr>                               <tr id="section-8">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-8">&#182;</a>               </div>               <p>id request</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="nx">_requestById</span><span class="p">(</span><span class="nx">params</span><span class="p">);</span>
+      <span class="p">}</span> 
+    <span class="p">},</span>
+
+
+    <span class="cm">/**</span>
+<span class="cm">     * Check if given request has already been sent.</span>
+<span class="cm">     * If so, return the promise of the sent request.</span>
+<span class="cm">     * The method is a getter and a setter.</span>
+<span class="cm">     */</span>
+    <span class="nx">cache</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="nx">promise</span><span class="p">)</span> <span class="p">{</span></pre></div>             </td>           </tr>                               <tr id="section-9">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-9">&#182;</a>               </div>               <p>the request identifier is a JSON string.</p>             </td>             <td class="code">               <div class="highlight"><pre>      <span class="kd">var</span> <span class="nx">requestIdentifier</span> <span class="o">=</span> <span class="nx">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">(</span><span class="nx">params</span><span class="p">);</span>
+
+      <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">promise</span> <span class="o">===</span> <span class="s1">&#39;undefined&#39;</span><span class="p">)</span> <span class="p">{</span></pre></div>             </td>           </tr>                               <tr id="section-10">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-10">&#182;</a>               </div>               <p>get</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="nx">_cache</span><span class="p">[</span> <span class="nx">requestIdentifier</span> <span class="p">];</span>
+      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span></pre></div>             </td>           </tr>                               <tr id="section-11">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-11">&#182;</a>               </div>               <p>set</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="nx">_cache</span><span class="p">[</span> <span class="nx">requestIdentifier</span> <span class="p">]</span> <span class="o">=</span> <span class="nx">promise</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">},</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * Runs a request with multiple sub requests</span>
+<span class="cm">     */</span>
+    <span class="nx">_requestMultiple</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="nx">options</span><span class="p">)</span> <span class="p">{</span>
+
+      <span class="kd">var</span> <span class="nx">_this</span> <span class="o">=</span> <span class="k">this</span><span class="p">,</span>
+        <span class="nx">defer</span> <span class="o">=</span> <span class="nx">$</span><span class="p">.</span><span class="nx">Deferred</span><span class="p">(),</span>
+        <span class="nx">subRequests</span> <span class="o">=</span> <span class="nx">_</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">p</span><span class="p">)</span> <span class="p">{</span>
+          <span class="k">return</span> <span class="nx">_this</span><span class="p">.</span><span class="nx">request</span><span class="p">(</span><span class="nx">p</span><span class="p">,</span> <span class="nx">options</span><span class="p">.</span><span class="nx">initial</span><span class="p">,</span> <span class="nx">options</span><span class="p">.</span><span class="nx">pageLength</span><span class="p">);</span>
+        <span class="p">});</span>
+
+      <span class="k">if</span> <span class="p">(</span><span class="nx">subRequests</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+
+        <span class="nx">$</span><span class="p">.</span><span class="nx">when</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="kc">null</span><span class="p">,</span> <span class="nx">subRequests</span><span class="p">)</span>
+          <span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span></pre></div>             </td>           </tr>                               <tr id="section-12">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-12">&#182;</a>               </div>               <p>solve the defer with an array containing the results of the sub
+requests.</p>             </td>             <td class="code">               <div class="highlight"><pre>            <span class="nx">defer</span><span class="p">.</span><span class="nx">resolve</span><span class="p">(</span> <span class="nb">Array</span><span class="p">.</span><span class="nx">prototype</span><span class="p">.</span><span class="nx">splice</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="nx">arguments</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="p">);</span>
+          <span class="p">});</span>
+
+      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="nx">defer</span><span class="p">.</span><span class="nx">resolve</span><span class="p">([]);</span>
+      <span class="p">}</span>
+
+      <span class="k">return</span> <span class="nx">defer</span><span class="p">;</span>
+    <span class="p">},</span>
+
+
+    <span class="cm">/**</span>
+<span class="cm">     * Tries to get a model by id (backbone collection.get(id))</span>
+<span class="cm">     * If unsuccessful, </span>
+<span class="cm">     * Fetches a model by ID from the endpoint.</span>
+<span class="cm">     * It is actually a facade for _requestByParams</span>
+<span class="cm">     */</span>
+    <span class="nx">_requestById</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">id</span><span class="p">)</span> <span class="p">{</span>
+      <span class="kd">var</span> <span class="nx">model</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="nx">id</span><span class="p">);</span>
+
+      <span class="k">if</span> <span class="p">(</span><span class="nx">model</span><span class="p">)</span> <span class="p">{</span></pre></div>             </td>           </tr>                               <tr id="section-13">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-13">&#182;</a>               </div>               <p>return a resolved defer object.</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="k">return</span> <span class="nx">$</span><span class="p">.</span><span class="nx">Deferred</span><span class="p">().</span><span class="nx">resolve</span><span class="p">(</span><span class="nx">model</span><span class="p">);</span>
+
+      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span></pre></div>             </td>           </tr>                               <tr id="section-14">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-14">&#182;</a>               </div>               <p>_requestByParams(defer, params, options)</p>             </td>             <td class="code">               <div class="highlight"><pre>        
+        <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="nx">_requestByParams</span><span class="p">(</span>
+          <span class="p">{</span> <span class="nx">id</span><span class="o">:</span> <span class="nx">id</span> <span class="p">},</span>
+          <span class="p">{</span>
+            <span class="nx">initial</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+            <span class="nx">pageLength</span><span class="o">:</span> <span class="mi">1</span>
+          <span class="p">}</span>
+        <span class="p">);</span>
+      <span class="p">}</span>
+    <span class="p">},</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * This method is pretty tricky:</span>
+<span class="cm">     *  1: It does a synch query (this.query), </span>
+<span class="cm">     *  2: sends a request to the server with</span>
+<span class="cm">        - initial</span>
+<span class="cm">        - pageLength</span>
+<span class="cm">        - notIn: a list of item ids to be ignores (here is the trick!)</span>
+<span class="cm">        TRICK: by sending a list of ids of models that we already loaded on the client,</span>
+<span class="cm">        we tell the server to just &#39;fill the gaps&#39;</span>
+<span class="cm">        When the request returns, we add the &#39;gap models&#39; to our client DB and the database </span>
+<span class="cm">        is synched!</span>
+<span class="cm">      3: waits for the _asynchResponse to do whatever processing of the server response</span>
+<span class="cm">      4: runs the query method again, with the same params, initial and pageLength </span>
+<span class="cm">        (now results may be different from the initial query, as the server may have</span>
+<span class="cm">        added some new &#39;gap models&#39;)</span>
+<span class="cm">     */</span>
+    <span class="nx">_requestByParams</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="nx">options</span><span class="p">)</span> <span class="p">{</span>
+      <span class="cm">/**</span>
+<span class="cm">       * params: query parameters</span>
+<span class="cm">       * options: </span>
+<span class="cm">       *  initial: initial item index</span>
+<span class="cm">       *  pageLength: </span>
+<span class="cm">       *  (ajaxOptions) - removed.</span>
+<span class="cm">       */</span>
+
+      <span class="kd">var</span> <span class="nx">defer</span> <span class="o">=</span> <span class="nx">$</span><span class="p">.</span><span class="nx">Deferred</span><span class="p">(),</span>
+        <span class="nx">_this</span> <span class="o">=</span> <span class="k">this</span><span class="p">;</span></pre></div>             </td>           </tr>                               <tr id="section-15">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-15">&#182;</a>               </div>               <p>load the models that already were loaded and attend the query</p>             </td>             <td class="code">               <div class="highlight"><pre>      <span class="kd">var</span> <span class="nx">loaded</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">query</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="nx">options</span><span class="p">),</span></pre></div>             </td>           </tr>                               <tr id="section-16">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-16">&#182;</a>               </div>               <p>pluck the loaded model ids.</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="nx">loadedIds</span> <span class="o">=</span> <span class="nx">_</span><span class="p">.</span><span class="nx">pluck</span><span class="p">(</span><span class="nx">loaded</span><span class="p">,</span> <span class="s1">&#39;id&#39;</span><span class="p">),</span></pre></div>             </td>           </tr>                               <tr id="section-17">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-17">&#182;</a>               </div>               <p>check if there is a unique attribute in the params list</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="nx">unique</span> <span class="o">=</span> <span class="nx">_</span><span class="p">.</span><span class="nx">find</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">value</span><span class="p">,</span> <span class="nx">name</span><span class="p">)</span> <span class="p">{</span>
+          <span class="k">return</span> <span class="nx">_</span><span class="p">.</span><span class="nx">contains</span><span class="p">(</span><span class="nx">_this</span><span class="p">.</span><span class="nx">uniqueAttr</span><span class="p">,</span> <span class="nx">name</span><span class="p">);</span>
+        <span class="p">})</span></pre></div>             </td>           </tr>                               <tr id="section-18">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-18">&#182;</a>               </div>               <p>if:
+    1: in the params list there is a value that is listed in this.uniqueAttr
+    AND
+    2: the list of loaded models has length equal to 1</p>             </td>             <td class="code">               <div class="highlight"><pre>      <span class="k">if</span> <span class="p">(</span><span class="nx">unique</span> <span class="o">&amp;&amp;</span> <span class="nx">loaded</span><span class="p">.</span><span class="nx">length</span> <span class="o">===</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">defer</span><span class="p">.</span><span class="nx">resolve</span><span class="p">(</span><span class="nx">loaded</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span></pre></div>             </td>           </tr>                               <tr id="section-19">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-19">&#182;</a>               </div>               <p>otherwise do asynch request to the database.</p>             </td>             <td class="code">               <div class="highlight"><pre></pre></div>             </td>           </tr>                               <tr id="section-20">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-20">&#182;</a>               </div>               <p>fill the gaps:</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="k">this</span><span class="p">.</span><span class="nx">_asynchRequest</span><span class="p">(</span><span class="nx">loadedIds</span><span class="p">,</span> <span class="nx">params</span><span class="p">,</span> <span class="nx">options</span><span class="p">)</span></pre></div>             </td>           </tr>                               <tr id="section-21">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-21">&#182;</a>               </div>               <p>after gaps were filled, respond, by solving the defer.</p>             </td>             <td class="code">               <div class="highlight"><pre>          <span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span></pre></div>             </td>           </tr>                               <tr id="section-22">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-22">&#182;</a>               </div>               <p>do synch query again with the same parameters</p>             </td>             <td class="code">               <div class="highlight"><pre>            <span class="kd">var</span> <span class="nx">results</span> <span class="o">=</span> <span class="nx">_this</span><span class="p">.</span><span class="nx">query</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="nx">options</span><span class="p">),</span></pre></div>             </td>           </tr>                               <tr id="section-23">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-23">&#182;</a>               </div>               <p>if pageLength is 1, just return one model instead of array of models.</p>             </td>             <td class="code">               <div class="highlight"><pre>              <span class="nx">results</span> <span class="o">=</span> <span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">pageLength</span> <span class="o">&amp;&amp;</span> <span class="nx">options</span><span class="p">.</span><span class="nx">pageLength</span> <span class="o">===</span> <span class="mi">1</span><span class="p">)</span> <span class="o">?</span> <span class="nx">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">:</span> <span class="nx">results</span><span class="p">;</span></pre></div>             </td>           </tr>                               <tr id="section-24">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-24">&#182;</a>               </div>               <p>console.log('result ids: ' + _.pluck(results, 'id'));</p>             </td>             <td class="code">               <div class="highlight"><pre></pre></div>             </td>           </tr>                               <tr id="section-25">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-25">&#182;</a>               </div>               <p>resolve the defer.</p>             </td>             <td class="code">               <div class="highlight"><pre>            <span class="nx">defer</span><span class="p">.</span><span class="nx">resolve</span><span class="p">(</span><span class="nx">results</span><span class="p">);</span>
+          <span class="p">});</span>
+        
+      <span class="p">}</span>
+
+      <span class="k">return</span> <span class="nx">defer</span><span class="p">;</span>
+    <span class="p">},</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * Asynch request</span>
+<span class="cm">     */</span>
+    <span class="nx">_asynchRequest</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">loadedIds</span><span class="p">,</span> <span class="nx">params</span><span class="p">,</span> <span class="nx">options</span><span class="p">)</span> <span class="p">{</span>
+      <span class="cm">/**</span>
+<span class="cm">       * params: query parameters</span>
+<span class="cm">       * options: same as for _requestByParams</span>
+<span class="cm">       *  initial</span>
+<span class="cm">       *  pageLength</span>
+<span class="cm">       */</span>
+
+      <span class="nx">loadedIds</span> <span class="o">=</span> <span class="nx">loadedIds</span> <span class="o">||</span> <span class="p">[];</span></pre></div>             </td>           </tr>                               <tr id="section-26">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-26">&#182;</a>               </div>               <p>add the initial and length parameters to the request data.</p>             </td>             <td class="code">               <div class="highlight"><pre>      <span class="kd">var</span> <span class="nx">metaData</span> <span class="o">=</span> <span class="p">{</span></pre></div>             </td>           </tr>                               <tr id="section-27">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-27">&#182;</a>               </div>               <p>array of ids to refuse (those ids from the models already loaded)</p>             </td>             <td class="code">               <div class="highlight"><pre>          <span class="nx">loadedIds</span><span class="o">:</span> <span class="nx">loadedIds</span><span class="p">,</span>
+
+          <span class="nx">initial</span><span class="o">:</span> <span class="nx">options</span><span class="p">.</span><span class="nx">initial</span><span class="p">,</span>
+          <span class="nx">pageLength</span><span class="o">:</span> <span class="nx">options</span><span class="p">.</span><span class="nx">pageLength</span><span class="p">,</span>
+        <span class="p">},</span></pre></div>             </td>           </tr>                               <tr id="section-28">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-28">&#182;</a>               </div>               <p>the request parameters must have data about the 
+request paging and loaded models
+AND 
+the parameters queried</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="nx">requestParams</span> <span class="o">=</span> <span class="nx">_</span><span class="p">.</span><span class="nx">extend</span><span class="p">(</span><span class="nx">metaData</span><span class="p">,</span> <span class="nx">params</span><span class="p">),</span></pre></div>             </td>           </tr>                               <tr id="section-29">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-29">&#182;</a>               </div>               <p>cached request promise</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="nx">cached</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">cache</span><span class="p">(</span><span class="nx">requestParams</span><span class="p">);</span>
+
+
+      <span class="k">if</span> <span class="p">(</span><span class="nx">cached</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">(</span><span class="nx">requestParams</span><span class="p">));</span>
+        <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;cached request&#39;</span><span class="p">)</span></pre></div>             </td>           </tr>                               <tr id="section-30">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-30">&#182;</a>               </div>               <p>return cached defer object.</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="k">return</span> <span class="nx">cached</span><span class="p">;</span>
+      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+
+        <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;request&#39;</span><span class="p">)</span>
+
+        <span class="cm">/**</span>
+<span class="cm">         * before, we implemented the request by ourselves,</span>
+<span class="cm">         * so we had to parse and add the response.</span>
+<span class="cm">         * The new implementation uses Bakcbone built-in fetch functionality, with some special options.</span>
+<span class="cm">         */</span></pre></div>             </td>           </tr>                               <tr id="section-31">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-31">&#182;</a>               </div>               <p>send request</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="kd">var</span> <span class="nx">defer</span> <span class="o">=</span> <span class="nx">$</span><span class="p">.</span><span class="nx">Deferred</span><span class="p">(),</span></pre></div>             </td>           </tr>                               <tr id="section-32">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-32">&#182;</a>               </div>               <p>fetch options: Backbone.set options, jqXHR options</p>             </td>             <td class="code">               <div class="highlight"><pre>          <span class="nx">fetchOptions</span> <span class="o">=</span> <span class="nx">_</span><span class="p">.</span><span class="nx">extend</span><span class="p">({</span> <span class="nx">data</span><span class="o">:</span> <span class="nx">requestParams</span><span class="p">,</span> <span class="nx">remove</span><span class="o">:</span> <span class="kc">false</span> <span class="p">},</span> <span class="k">this</span><span class="p">.</span><span class="nx">ajaxOptions</span><span class="p">),</span></pre></div>             </td>           </tr>                               <tr id="section-33">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-33">&#182;</a>               </div>               <p>run query</p>             </td>             <td class="code">               <div class="highlight"><pre>          <span class="nx">query</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">fetch</span><span class="p">(</span><span class="nx">fetchOptions</span><span class="p">);</span></pre></div>             </td>           </tr>                               <tr id="section-34">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-34">&#182;</a>               </div>               <p>cache query.</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="k">this</span><span class="p">.</span><span class="nx">cache</span><span class="p">(</span><span class="nx">requestParams</span><span class="p">,</span> <span class="nx">query</span><span class="p">);</span></pre></div>             </td>           </tr>                               <tr id="section-35">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-35">&#182;</a>               </div>               <p>return deferred object.</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="k">return</span> <span class="nx">query</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">},</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * A more powerful &#39;where&#39; method that invokes _evaluateModel method.</span>
+<span class="cm">     */</span>
+    <span class="nx">query</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="nx">options</span><span class="p">)</span> <span class="p">{</span>
+      <span class="cm">/**</span>
+<span class="cm">       * params: query parameters</span>
+<span class="cm">       * options: initial, pageLength</span>
+<span class="cm">       */</span>
+      <span class="kd">var</span> <span class="nx">_this</span> <span class="o">=</span> <span class="k">this</span><span class="p">,</span>
+        <span class="nx">initial</span> <span class="o">=</span> <span class="nx">options</span><span class="p">.</span><span class="nx">initial</span><span class="p">,</span>
+        <span class="nx">pageLength</span> <span class="o">=</span> <span class="nx">options</span><span class="p">.</span><span class="nx">pageLength</span><span class="p">,</span></pre></div>             </td>           </tr>                               <tr id="section-36">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-36">&#182;</a>               </div>               <p>filter models using the _evaluateModel method.</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="nx">filtered</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">filter</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">model</span><span class="p">)</span> <span class="p">{</span>
+
+          <span class="k">return</span> <span class="nx">_this</span><span class="p">.</span><span class="nx">_evaluateModel</span><span class="p">(</span><span class="nx">model</span><span class="p">,</span> <span class="nx">params</span><span class="p">);</span>
+        <span class="p">});</span>
+
+      <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">_</span><span class="p">.</span><span class="nx">isUndefined</span><span class="p">(</span><span class="nx">initial</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="nx">_</span><span class="p">.</span><span class="nx">isUndefined</span><span class="p">(</span><span class="nx">pageLength</span><span class="p">)</span> <span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="nx">_</span><span class="p">.</span><span class="nx">chain</span><span class="p">(</span><span class="nx">filtered</span><span class="p">)</span>
+            <span class="p">.</span><span class="nx">rest</span><span class="p">(</span><span class="nx">initial</span><span class="p">)</span>
+            <span class="p">.</span><span class="nx">first</span><span class="p">(</span><span class="nx">pageLength</span><span class="p">)</span>
+            <span class="p">.</span><span class="nx">value</span><span class="p">();</span>
+      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="nx">filtered</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">},</span>
+
+    <span class="cm">/**</span>
+<span class="cm">     * loop through the models properties</span>
+<span class="cm">     */</span>
+    <span class="nx">_evaluateModel</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">model</span><span class="p">,</span> <span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
+      <span class="kd">var</span> <span class="nx">_this</span> <span class="o">=</span> <span class="k">this</span><span class="p">;</span>
+
+      <span class="k">return</span> <span class="nx">_</span><span class="p">.</span><span class="nx">every</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">param</span><span class="p">,</span> <span class="nx">key</span><span class="p">)</span> <span class="p">{</span></pre></div>             </td>           </tr>                               <tr id="section-37">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-37">&#182;</a>               </div>               <p>the param is param.
+get the attr.</p>             </td>             <td class="code">               <div class="highlight"><pre>        <span class="kd">var</span> <span class="nx">attr</span> <span class="o">=</span> <span class="nx">model</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="nx">key</span><span class="p">)</span></pre></div>             </td>           </tr>                               <tr id="section-38">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-38">&#182;</a>               </div>               <p>check if there is an attribute filter defined for the key</p>             </td>             <td class="code">               <div class="highlight"><pre>          <span class="nx">attrFilter</span> <span class="o">=</span> <span class="nx">_this</span><span class="p">.</span><span class="nx">attrFilters</span><span class="p">[</span> <span class="nx">key</span> <span class="p">];</span>
+
+        <span class="k">return</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">attrFilter</span> <span class="o">===</span> <span class="s1">&#39;function&#39;</span><span class="p">)</span> <span class="o">?</span> <span class="nx">attrFilter</span><span class="p">(</span><span class="nx">attr</span><span class="p">,</span> <span class="nx">param</span><span class="p">,</span> <span class="nx">model</span><span class="p">)</span> <span class="o">:</span> <span class="nx">attr</span> <span class="o">==</span> <span class="nx">param</span><span class="p">;</span>
+      <span class="p">});</span>
+    <span class="p">},</span>
+
+
+
+
+
+
+
+
+
+    <span class="cm">/**</span>
+<span class="cm">     * Returns a Backbone.Collection object that listens to &#39;add&#39;,&#39;remove&#39; and &#39;reset&#39;</span>
+<span class="cm">     * events on this main DB object.</span>
+<span class="cm">     */</span>
+    <span class="nx">facet</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="nx">options</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="p">},</span>
+  <span class="p">});</span>
+
+  <span class="k">return</span> <span class="nx">DB</span><span class="p">;</span>
+<span class="p">});</span>
+
+</pre></div>             </td>           </tr>                </tbody>     </table>   </div> </body> </html> 
