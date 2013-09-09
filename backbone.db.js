@@ -386,6 +386,22 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 				return (typeof attrFilter === 'function') ? attrFilter(attr, param, model) : attr == param;
 			});
 		},
+
+
+
+
+
+
+
+
+
+		/**
+		 * Returns a Backbone.Collection object that listens to 'add','remove' and 'reset'
+		 * events on this main DB object.
+		 */
+		facet: function(params, options) {
+
+		},
 	});
 
 	return DB;
