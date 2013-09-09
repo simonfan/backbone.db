@@ -1,10 +1,135 @@
 define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 
+
+
+	var Facet = Backbone.Collection.extend({
+		initialize: function(models, options) {
+			options = options || {};
+			this.initFacet(options);
+		},
+
+		initFacet: function(options) {
+			/**
+			 * options:
+			 *	- db
+			 *	- filter
+			 */
+			_.bindAll(this,'resetRequest','nextPage','reset','add');
+
+			/**
+			 * db is the Backbone.DB object that will respond to queries
+			 */
+			this.db = options.db;
+
+			/** 
+			 * parameters is a function to be run to retrieve the query parameters.
+			 */
+			this.parameters = options.parameters || this.parameters;
+
+
+			this.pageLength = options.pageLength || this.pageLength;
+
+
+			/**
+			 * Listen to events
+			 */
+			this.listenTo(this.db, 'add', this._handleAdd)
+				.listenTo(this.db, 'remove', this.remove)
+				.listenTo(this.db, 'reset', this._handleReset);
+		},
+
+		parameters: false,
+		pageLength: 10,
+
+		/**
+		 * Loops through required parameters and checks their values against the model one's
+		 */
+		evaluateModel: function(model, params) {
+			/**
+			 * Apply the db's evaluate model, so we can use the db attrFilters
+			 */
+			return this.db.evaluateModel(model, params);
+		},
+
+		_modelIsAcceptable: function(model) {
+			var params = this._evaluateProperty('parameters');
+			return this.evaluateModel(model, params);
+		},
+
+		_handleAdd: function(model) {
+			if (this._modelIsAcceptable(model)) {
+				this.add(model);
+			}
+		},
+
+		_handleReset: function(collection) {
+			var acceptableModels = collection.filter(this._modelIsAcceptable);
+
+			this.reset(acceptableModels);
+		},
+
+		/**
+		 * If property is a function, execute the function and return the value
+		 * otherwise return the property itself.
+		 */
+		_evaluateProperty: function(propName) {
+			return typeof this[ propName ] === 'function' ? this[ propName ]() : this[ propName ];
+		},
+
+		/**
+		 * Resets this collection with data newly retrieved from the database.
+		 */
+		resetRequest: function() {
+				// get parameters
+			var params = this._evaluateProperty('parameters'),
+				// initial index
+				initial = 0,
+				pageLength = this._evaluateProperty('pageLength');
+
+			this.db.request(params, initial, pageLength)
+				// reset this collection with the models.
+				.then(this.reset);
+		},
+
+		/**
+		 * fetches next page by passing the length of this collection as initial parameter
+		 * to db.request(params, initial, pageLength)
+		 */
+		nextPage: function() {
+				// get parameters
+			var params = this._evaluateProperty('parameters'),
+				// the index at which start the query
+				initial = this.length,
+				// the length of results to be returned
+				pageLength = this._evaluateProperty('pageLength');
+
+			this.db.request(params, initial, pageLength);
+		},
+
+		request: function() {
+			var params = this._evaluateProperty('parameters'),
+				initial = this.length,
+				pageLength = this._evaluateProperty('pageLength');
+
+			console.log(this.db);
+
+			return this.db.request(params, initial, pageLength);
+		}
+	});
+
+
+
 	var DB = Backbone.DB = Backbone.Collection.extend({
 		initialize: function(models, options) {
 			options = options || {};
 			this.initDb(options);
 		},
+
+		/**
+		 * The Database Facet constructor.
+		 */
+		Facet: Facet,
+
 
 		initDb: function(options) {
 			/**
@@ -27,7 +152,7 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 			 * letting the Backbone DB instance know that if it can find one
 			 * model with the uniqueAttr corresponding to the request params
 			 * it can securely return the result without cheking with the server if there are
-			 * no other possible results.
+			 * other possible results.
 			 */
 			this.uniqueAttr = _.union(['id'], options.uniqueAttr);
 
@@ -343,7 +468,7 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 		},
 
 		/**
-		 * A more powerful 'where' method that invokes _evaluateModel method.
+		 * A more powerful 'where' method that invokes evaluateModel method.
 		 */
 		query: function(params, options) {
 			/**
@@ -351,13 +476,14 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 			 * options: initial, pageLength
 			 */
 			var _this = this,
+				options = options || {},
 				initial = options.initial,
 				pageLength = options.pageLength,
 
-				// filter models using the _evaluateModel method.
+				// filter models using the evaluateModel method.
 				filtered = this.filter(function(model) {
 
-					return _this._evaluateModel(model, params);
+					return _this.evaluateModel(model, params);
 				});
 
 			if (!_.isUndefined(initial) && !_.isUndefined(pageLength) ) {
@@ -373,7 +499,7 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 		/**
 		 * loop through the models properties
 		 */
-		_evaluateModel: function(model, params) {
+		evaluateModel: function(model, params) {
 			var _this = this;
 
 			return _.every(params, function(param, key) {
@@ -399,8 +525,24 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 		 * Returns a Backbone.Collection object that listens to 'add','remove' and 'reset'
 		 * events on this main DB object.
 		 */
-		facet: function(params, options) {
+		facet: function(params, options, constructor) {
+				// build a constructor
+			var FacetConstructor = typeof constructor === 'function' ? this.Facet.extend(constructor.prototype) : this.Facet.extend(constructor),
+				// get the models that attend the params
+				models = this.query(typeof params === 'function' ? params() : params);
 
+
+			options = _.extend(options, {
+				db: this,
+				parameters: params,
+			});
+
+			console.log(FacetConstructor.prototype)
+
+			var facet = new FacetConstructor(models, options);
+			facet.initFacet(options);
+
+			return facet;
 		},
 	});
 
