@@ -23,7 +23,6 @@ function(DB          , $      , undef      , Backbone , undef    , ListView     
 					return _.contains(p, a);
 
 				} else if (aIsArr && !pIsArr) {
-					console.log(_.contains(a, p))
 					// attr is array, param is single
 					// true if paramvalue is in attr
 					return _.contains(a, p);
@@ -74,53 +73,14 @@ function(DB          , $      , undef      , Backbone , undef    , ListView     
 	var filterModel = new FilterModel();
 
 
-	/**
-	 * Filtered books collection
-	 */
-	var FilteredCollection = Backbone.Collection.extend({
-		initialize: function(models, options) {
-			/**
-			 * options:
-			 *	- source
-			 *	- filter
-			 */
-			_.bindAll(this,'restart','nextPage','reset','add','nextPage');
 
-			this.source = options.source;
-			this.filter = options.filter;
-
-			this.filter.on('change', this.restart);
-
-			// the page length
-			this.page = 0;
-			this.pageLength = options.pageLength;
-		},
-
-		restart: function() {
-			var pageLength = typeof this.pageLength === 'function' ? this.pageLength() : this.pageLength;
-
-			console.log(pageLength);
-
-			this.source.request(this.filter.parameters(), 0, pageLength)
-				.then(this.reset);
-		},
-
-		nextPage: function() {
-			var pageLength = typeof this.pageLength === 'function' ? this.pageLength() : this.pageLength;
-
-			this.source.request(this.filter.parameters(), this.length, pageLength)
-				.then(this.add);
-		}
-	})
-	window.filteredBooks = new FilteredCollection([], {
-		source: books,
+	window.filteredBooks = new DB.Filtered([], {
+		db: books,
 		filter: filterModel,
 		pageLength: function() {
 			return $('#pageLength').val() || 10;
 		}
 	});
-
-
 
 	/**
 	 * Views:

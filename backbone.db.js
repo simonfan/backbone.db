@@ -2,6 +2,12 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 
 
 
+
+
+
+
+
+
 	var Facet = Backbone.Collection.extend({
 		initialize: function(models, options) {
 			options = options || {};
@@ -525,19 +531,20 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 		 * Returns a Backbone.Collection object that listens to 'add','remove' and 'reset'
 		 * events on this main DB object.
 		 */
-		facet: function(params, options, constructor) {
-				// build a constructor
-			var FacetConstructor = typeof constructor === 'function' ? this.Facet.extend(constructor.prototype) : this.Facet.extend(constructor),
-				// get the models that attend the params
-				models = this.query(typeof params === 'function' ? params() : params);
+		facet: function(facetOptions) {
 
 
-			options = _.extend(options, {
+
+				// build a facetOptions.constructor
+			var FacetConstructor = typeof facetOptions.constructor === 'function' ? this.Facet.extend(facetOptions.constructor.prototype) : this.Facet.extend(facetOptions.constructor),
+				// get the models that attend the facetOptions.params
+				models = this.query(typeof facetOptions.params === 'function' ? facetOptions.params() : facetOptions.params);
+
+
+			options = _.extend({}, facetOptions.options, {
 				db: this,
-				parameters: params,
+				parameters: facetOptions.params,
 			});
-
-			console.log(FacetConstructor.prototype)
 
 			var facet = new FacetConstructor(models, options);
 			facet.initFacet(options);
@@ -545,6 +552,88 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 			return facet;
 		},
 	});
+
+
+
+
+	/**
+	 * Filtered collection
+	 */
+	DB.Filtered = Backbone.Collection.extend({
+		initialize: function(models, options) {
+			/**
+			 * options:
+			 *	- db
+			 *	- filter
+			 */
+			_.bindAll(this,'resetRequest','nextPage','reset','add');
+
+			/**
+			 * db is the Backbone.DB object that will respond to queries
+			 */
+			this.db = options.db;
+
+			/**
+			 * filter
+			 */
+			this.filter = options.filter;
+
+			/**
+			 * listen to changes on the filter
+			 */
+			this.listenTo(this.filter, 'change', this.resetRequest);
+
+
+			/** 
+			 * parameters is a function to be run to retrieve the query parameters.
+			 */
+			this.parameters = options.parameters || this.parameters;
+
+			/**
+			 * Page lengh may be a function or a value it will be passed on to the db.
+			 */
+			this.pageLength = options.pageLength || this.pageLength;
+		},
+
+		pageLength: 10,
+
+		parameters: function() {
+			return this.filter.attributes;
+		},
+
+		/**
+		 * Resets this collection with data newly retrieved from the database.
+		 */
+		resetRequest: function() {
+				// get parameters
+			var params = this.parameters(),
+				// initial index
+				initial = 0,
+				pageLength = typeof this.pageLength === 'function' ? this.pageLength() : this.pageLength;
+
+			this.db.request(params, initial, pageLength)
+				// reset this collection with the models.
+				.then(this.reset);
+		},
+
+		/**
+		 * fetches next page by passing the length of this collection as initial parameter
+		 * to db.request(params, initial, pageLength)
+		 */
+		nextPage: function() {
+				// get parameters
+			var params = this.parameters(),
+				// the index at which start the query
+				initial = this.length,
+				// the length of results to be returned
+				pageLength = typeof this.pageLength === 'function' ? this.pageLength() : this.pageLength;
+
+			this.db.request(params, initial, pageLength)
+				// add results to this collection
+				.then(this.add);
+		},
+	});
+
 
 	return DB;
 });
