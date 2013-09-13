@@ -46,7 +46,7 @@ function(DB          , $      , undef      , Backbone , undef    , ListView     
 			dataType: 'jsonp'
 		},
 
-		uniqueAttr: ['reader_and_reading'],
+	//	uniqueAttr: ['reader_and_reading'],
 	});
 
 	/**

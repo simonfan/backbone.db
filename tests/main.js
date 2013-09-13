@@ -12,6 +12,7 @@ require.config({
 
 		// the module files go here
 		'backbone.db': '../backbone.db',
+		'backbone.db.filtered': '../backbone.db.filtered',
 
 		// DEMO
 		'demo-main': 'demo',	// the main file for the demo
