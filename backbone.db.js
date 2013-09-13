@@ -3,7 +3,83 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 
 
 
+	/**
+	 * Filtered books collection
+	 */
+	Filtered = Backbone.Collection.extend({
+		initialize: function(models, options) {
+			/**
+			 * options:
+			 *	- db
+			 *	- filter
+			 */
+			_.bindAll(this,'resetRequest','nextPage','reset','add');
 
+			/**
+			 * db is the Backbone.DB object that will respond to queries
+			 */
+			this.db = options.db;
+
+			/**
+			 * filter
+			 */
+			this.filter = options.filter;
+
+			/**
+			 * listen to changes on the filter
+			 */
+			this.listenTo(this.filter, 'change', this.resetRequest);
+
+
+			/** 
+			 * parameters is a function to be run to retrieve the query parameters.
+			 */
+			this.parameters = options.parameters || this.parameters;
+
+			/**
+			 * Page lengh may be a function or a value it will be passed on to the db.
+			 */
+			this.pageLength = options.pageLength || this.pageLength;
+		},
+
+		pageLength: 10,
+
+		parameters: function() {
+			return this.filter.attributes;
+		},
+
+		/**
+		 * Resets this collection with data newly retrieved from the database.
+		 */
+		resetRequest: function() {
+				// get parameters
+			var params = this.parameters(),
+				// initial index
+				initial = 0,
+				pageLength = typeof this.pageLength === 'function' ? this.pageLength() : this.pageLength;
+
+			this.db.request(params, initial, pageLength)
+				// reset this collection with the models.
+				.then(this.reset);
+		},
+
+		/**
+		 * fetches next page by passing the length of this collection as initial parameter
+		 * to db.request(params, initial, pageLength)
+		 */
+		nextPage: function() {
+				// get parameters
+			var params = this.parameters(),
+				// the index at which start the query
+				initial = this.length,
+				// the length of results to be returned
+				pageLength = typeof this.pageLength === 'function' ? this.pageLength() : this.pageLength;
+
+			this.db.request(params, initial, pageLength)
+				// add results to this collection
+				.then(this.add);
+		},
+	});
 
 
 
@@ -551,89 +627,18 @@ define(['backbone','jquery','underscore'], function(Backbone, $, undef ) {
 
 			return facet;
 		},
-	});
-
-
-
-
-	/**
-	 * Filtered collection
-	 */
-	DB.Filtered = Backbone.Collection.extend({
-		initialize: function(models, options) {
-			/**
-			 * options:
-			 *	- db
-			 *	- filter
-			 */
-			_.bindAll(this,'resetRequest','nextPage','reset','add');
-
-			/**
-			 * db is the Backbone.DB object that will respond to queries
-			 */
-			this.db = options.db;
-
-			/**
-			 * filter
-			 */
-			this.filter = options.filter;
-
-			/**
-			 * listen to changes on the filter
-			 */
-			this.listenTo(this.filter, 'change', this.resetRequest);
-
-
-			/** 
-			 * parameters is a function to be run to retrieve the query parameters.
-			 */
-			this.parameters = options.parameters || this.parameters;
-
-			/**
-			 * Page lengh may be a function or a value it will be passed on to the db.
-			 */
-			this.pageLength = options.pageLength || this.pageLength;
-		},
-
-		pageLength: 10,
-
-		parameters: function() {
-			return this.filter.attributes;
-		},
 
 		/**
-		 * Resets this collection with data newly retrieved from the database.
+		 * returns a filtered collection
 		 */
-		resetRequest: function() {
-				// get parameters
-			var params = this.parameters(),
-				// initial index
-				initial = 0,
-				pageLength = typeof this.pageLength === 'function' ? this.pageLength() : this.pageLength;
+		filtered: function(options) {
+			options.db = this;
 
-			this.db.request(params, initial, pageLength)
-				// reset this collection with the models.
-				.then(this.reset);
-		},
-
-		/**
-		 * fetches next page by passing the length of this collection as initial parameter
-		 * to db.request(params, initial, pageLength)
-		 */
-		nextPage: function() {
-				// get parameters
-			var params = this.parameters(),
-				// the index at which start the query
-				initial = this.length,
-				// the length of results to be returned
-				pageLength = typeof this.pageLength === 'function' ? this.pageLength() : this.pageLength;
-
-			this.db.request(params, initial, pageLength)
-				// add results to this collection
-				.then(this.add);
+			return new Filtered([], options);
 		},
 	});
 
+	DB.Filtered = Filtered;
 
 	return DB;
 });

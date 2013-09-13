@@ -74,8 +74,7 @@ function(DB          , $      , undef      , Backbone , undef    , ListView     
 
 
 
-	window.filteredBooks = new DB.Filtered([], {
-		db: books,
+	window.filteredBooks = books.filtered({
 		filter: filterModel,
 		pageLength: function() {
 			return $('#pageLength').val() || 10;
