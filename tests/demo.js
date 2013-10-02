@@ -74,7 +74,13 @@ function(DB          , $      , undef      , Backbone , undef    , ListView     
 
 
 
-	window.filteredBooks = books.filtered({
+	window.filteredBooks = books.filtered(Backbone.Collection.extend({
+
+		initialize: function() {
+			alert('yahoo')
+		}
+
+	}),{
 		filter: filterModel,
 		pageLength: function() {
 			return $('#pageLength').val() || 10;

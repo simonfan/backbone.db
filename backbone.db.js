@@ -392,10 +392,19 @@ function(Backbone , $      , undef      , Filtered             ) {
 		/**
 		 * returns a filtered collection with reference to 'this' as the db.
 		 */
-		filtered: function(options) {
+		filtered: function(first, second) {
+			var firstIsFunction = typeof first === 'function',
+				options = firstIsFunction ? second : first,
+				Constructor = firstIsFunction ? Filtered.extend(first.prototype).extend({
+					initialize: function(models, options) {
+						Filtered.prototype.initialize.call(this, models, options);
+						first.prototype.initialize.call(this, models, options);
+					}
+				}) : Filtered;
+
 			options.db = this;
 
-			return new Filtered([], options);
+			return new Constructor([], options);
 		},
 	});
 
